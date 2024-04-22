@@ -12,6 +12,14 @@ locals {
   awm_setup_script    = "awm-setup.py"
   provisioning_script = "awm-provisioning.sh"
   backup_script       = "backup_anyware_manager.py"
+  user_data = templatefile(
+    "${path.module}/user-data.sh.tmpl",
+    {
+      bucket_name         = var.bucket_name,
+      provisioning_script = local.provisioning_script,
+      backup_script       = local.backup_script,
+    }
+  )
 }
 
 resource "aws_s3_object" "awm-setup-script" {
@@ -59,16 +67,6 @@ resource "aws_s3_object" "awm-backup-script" {
 resource "aws_s3_object" "backups-folder" {
   bucket = var.bucket_name
   key    = "backups/"
-}
-
-data "template_file" "user-data" {
-  template = file("${path.module}/user-data.sh.tmpl")
-
-  vars = {
-    bucket_name         = var.bucket_name,
-    provisioning_script = local.provisioning_script,
-    backup_script       = local.backup_script,
-  }
 }
 
 # Need to do this to look up AMI ID, which is different for each region
@@ -258,7 +256,7 @@ resource "aws_instance" "awm" {
 
   iam_instance_profile = aws_iam_instance_profile.awm-instance-profile.name
 
-  user_data = data.template_file.user-data.rendered
+  user_data = local.user_data
 
   lifecycle {
     ignore_changes = [
