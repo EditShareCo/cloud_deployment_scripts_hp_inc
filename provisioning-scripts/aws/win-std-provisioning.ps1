@@ -17,7 +17,7 @@ $TERADICI_DOWNLOAD_TOKEN = "yj39yHtgj68Uv2Qf"
 
 $LOG_FILE = "C:\Teradici\provisioning.log"
 
-$PCOIP_AGENT_LOCATION_URL = "https://dl.teradici.com/$TERADICI_DOWNLOAD_TOKEN/pcoip-agent/raw/names/pcoip-agent-standard-exe/versions/$PCOIP_AGENT_VERSION"
+$PCOIP_AGENT_LOCATION_URL = "https://dl.anyware.hp.com/$TERADICI_DOWNLOAD_TOKEN/pcoip-agent/raw/names/pcoip-agent-standard-exe/versions/$PCOIP_AGENT_VERSION"
 $PCOIP_AGENT_FILENAME     = "pcoip-agent-standard_$PCOIP_AGENT_VERSION.exe"
 
 $DATA = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
