@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+################################################
+# Note this file has EditShare Customizations. #
+################################################
+
 # Copyright (c) 2020 Teradici Corporation;  © Copyright 2023 HP Development Company, L.P.
 #
 # This source code is licensed under the MIT license found in the
@@ -7,8 +11,9 @@
 
 import argparse
 import json
-import requests
 import configparser
+from typing import Any
+import requests
 import boto3
 from botocore.exceptions import ClientError
 
@@ -16,27 +21,29 @@ AWM_API_URL = "https://localhost/api/v1"
 ADMIN_USER = "adminUser"
 
 
-def awm_login(username, password):
+def awm_login(user_name: str, password: str, req_sess: requests.Session) -> None:
+    """Login to Anyware Manager API and set token to session."""
     payload = {
-        "username": username,
+        "username": user_name,
         "password": password,
     }
-    resp = session.post(
+    resp = req_sess.post(
         f"{AWM_API_URL}/auth/ad/login",
         json=payload,
     )
     resp.raise_for_status()
 
     token = resp.json()["data"]["token"]
-    session.headers.update({"Authorization": token})
+    req_sess.headers.update({"Authorization": token})
 
 
-def deployment_create(name, reg_code):
+def deployment_create(name: str, reg_code: str, req_sess: requests.Session) -> Any:
+    """Create new Anyware Manager deployment."""
     payload = {
         "deploymentName": name,
         "registrationCode": reg_code,
     }
-    resp = session.post(
+    resp = req_sess.post(
         f"{AWM_API_URL}/deployments",
         json=payload,
     )
@@ -45,9 +52,12 @@ def deployment_create(name, reg_code):
     return resp.json()["data"]
 
 
-def deployment_key_create(deployment, name):
-    payload = {"deploymentId": deployment["deploymentId"], "keyName": name}
-    resp = session.post(
+def deployment_key_create(
+    deployment_info: dict, name: str, req_sess: requests.Session  # type: ignore
+) -> Any:
+    """Create new Anyware Manager deployment key."""
+    payload = {"deploymentId": deployment_info["deploymentId"], "keyName": name}
+    resp = req_sess.post(
         f"{AWM_API_URL}/auth/keys",
         json=payload,
     )
@@ -56,23 +66,26 @@ def deployment_key_create(deployment, name):
     return resp.json()["data"]
 
 
-def deployment_key_write(deployment_key, path):
-    with open(path, "w") as f:
+def deployment_key_write(deployment_key: str, path: str) -> None:
+    """Write Anyware Manager deployment key to file."""
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(deployment_key, f)
 
 
-def get_aws_sa_key(path):
+def get_aws_sa_key(path: str) -> configparser.SectionProxy:
+    """Return AWS credentials from INI file"""
     config = configparser.ConfigParser()
     config.read(path)
 
     return config["default"]
 
 
-def get_username(key):
+def get_username(aws_key: configparser.SectionProxy) -> Any:
+    """Get AWS username associated with the provided AWS credentials."""
     iam = boto3.resource("iam")
     try:
         resp = iam.meta.client.get_access_key_last_used(
-            AccessKeyId=key["aws_access_key_id"]
+            AccessKeyId=aws_key["aws_access_key_id"]
         )
         return resp["UserName"]
     except ClientError as e:
@@ -81,17 +94,20 @@ def get_username(key):
         print(e)
 
 
-def validate_aws_sa(username, key):
+def validate_aws_sa(
+    user_name: str, aws_key: configparser.SectionProxy, req_sess: requests.Session
+) -> bool:
+    """Validate AWS credentials with Anyware Manager."""
     print("Validating AWS credentials with Anyware Manager...")
     payload = {
         "provider": "aws",
         "credential": {
-            "userName": username,
-            "accessKeyId": key["aws_access_key_id"],
-            "secretAccessKey": key["aws_secret_access_key"],
+            "userName": user_name,
+            "accessKeyId": aws_key["aws_access_key_id"],
+            "secretAccessKey": aws_key["aws_secret_access_key"],
         },
     }
-    resp = session.post(
+    resp = req_sess.post(
         f"{AWM_API_URL}/auth/users/cloudServiceAccount/validate",
         json=payload,
     )
@@ -112,18 +128,24 @@ def validate_aws_sa(username, key):
         return False
 
 
-def deployment_add_aws_account(username, key, deployment):
+def deployment_add_aws_account(
+    user_name: str,
+    aws_key: configparser.SectionProxy,
+    deployment_info: dict,  # type: ignore
+    req_sess: requests.Session,
+) -> None:
+    """Add AWS credentials to Anyware Manager deployment."""
     credentials = {
-        "userName": username,
-        "accessKeyId": key["aws_access_key_id"],
-        "secretAccessKey": key["aws_secret_access_key"],
+        "userName": user_name,
+        "accessKeyId": aws_key["aws_access_key_id"],
+        "secretAccessKey": aws_key["aws_secret_access_key"],
     }
     payload = {
         "provider": "aws",
         "credential": credentials,
     }
-    resp = session.post(
-        f"{AWM_API_URL}/deployments/{deployment['deploymentId']}/cloudServiceAccounts",
+    resp = req_sess.post(
+        f"{AWM_API_URL}/deployments/{deployment_info['deploymentId']}/cloudServiceAccounts",
         json=payload,
     )
 
@@ -176,16 +198,16 @@ if __name__ == "__main__":
     # The credential for Anyware Manager login are stated in default configuration
     # https://www.teradici.com/web-help/anyware_manager/23.04/cam_standalone_installation/default_config/#5-access-the-admin-console
     print("Creating Anyware Manager deployment...")
-    awm_login(ADMIN_USER, args.password)
-    deployment = deployment_create(args.deployment_name, args.reg_code)
-    awm_deployment_key = deployment_key_create(deployment, args.key_name)
+    awm_login(ADMIN_USER, args.password, session)
+    deployment = deployment_create(args.deployment_name, args.reg_code, session)
+    awm_deployment_key = deployment_key_create(deployment, args.key_name, session)
     deployment_key_write(awm_deployment_key, args.key_file)
 
     if args.aws_key:
         key = get_aws_sa_key(args.aws_key)
         username = get_username(key)
-        if username and validate_aws_sa(username, key):
+        if username and validate_aws_sa(username, key, session):
             print("Adding AWS credentials to Anyware Manager deployment...")
-            deployment_add_aws_account(username, key, deployment)
+            deployment_add_aws_account(username, key, deployment, session)
         else:
             print("Skip adding AWS credentials to Anyware Manager deployment.")
