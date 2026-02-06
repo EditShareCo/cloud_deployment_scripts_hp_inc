@@ -134,7 +134,7 @@ get_credentials() {
         if [ "$AWM_AWS_CREDENTIALS_FILE" ]
         then
             log "--> Decrypting AWS Service Account credentials file..."
-            aws kms decrypt --region $AWS_REGION --ciphertext-blob "fileb://$INSTALL_DIR/$AWM_AWS_CREDENTIALS_FILE" --output text --query Plaintext | base64 -d > "$INSTALL_DIR/$AWM_AWS_CREDENTIALS_FILE.decrypted"
+            printf "%b" "$(aws kms decrypt --region $AWS_REGION --ciphertext-blob "file://$INSTALL_DIR/$AWM_AWS_CREDENTIALS_FILE" --output text --query Plaintext | base64 -d)" > "$INSTALL_DIR/$AWM_AWS_CREDENTIALS_FILE.decrypted"
             mv "$AWM_AWS_CREDENTIALS_FILE.decrypted" "$INSTALL_DIR/$AWM_AWS_CREDENTIALS_FILE"
         fi
     fi
